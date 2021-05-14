@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#include "i8080_cpu.h"
+#include "i8080/cpu.h"
 
 /* The following macro detects if a carry was emitted at bit during the addition of lhs and rhs which lead to res */
 #define I8080_CARRY_OUT(lhs, rhs, res, bit) ((~(res) & ((lhs) | (rhs)) | (lhs) & (rhs)) >> (bit) & 1)

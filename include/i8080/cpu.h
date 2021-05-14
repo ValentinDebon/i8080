@@ -4,15 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define I8080_TARGET_LITTLE_ENDIAN
-#elif __BYTE_ORDER == __BIG_ENDIAN
-#define I8080_TARGET_BIG_ENDIAN
-#endif
-
-#if !defined(I8080_TARGET_LITTLE_ENDIAN) && !defined(I8080_TARGET_BIG_ENDIAN)
-#error "Unable to determine target endianness"
-#endif
+#include "i8080/endianness.h"
 
 #define I8080_MEMORY_SIZE 0x10000
 

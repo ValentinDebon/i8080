@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <err.h>
 
-#include "i8080_cpu.h"
+#include "i8080/cpu.h"
 
 struct i8080_args {
 	const char *disassembly;
