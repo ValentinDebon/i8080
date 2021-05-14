@@ -18,7 +18,7 @@
 #define I8080_CONDITION_SIGN(res)                      (((res) >> (sizeof(res) * 8 - 1)) << I8080_BIT_CONDITION_SIGN)
 
 #define I8080_CONDITION_AUXILIARY_BORROW(lhs, rhs, res) I8080_CONDITION_AUXILIARY_CARRY(lhs, ~(rhs), res)
-#define I8080_CONDITION_BORROW(lhs, rhs, res) (I8080_CONDITION_CARRY((lhs), ~(rhs), (res)) ^ I8080_MASK_CONDITION_CARRY)
+#define I8080_CONDITION_BORROW(lhs, rhs, res) (I8080_CONDITION_CARRY(lhs, ~(rhs), res) ^ I8080_MASK_CONDITION_CARRY)
 
 /* The following masks help erase condition flags in several instruction (eg. INR, DCR...) */
 #define I8080_MASK_CONDITIONS_SZ_A_P__ (I8080_MASK_CONDITION_SIGN |\
@@ -28,14 +28,9 @@
 
 #define I8080_MASK_CONDITIONS_SZ_A_P_C (I8080_MASK_CONDITIONS_SZ_A_P__ | I8080_MASK_CONDITION_CARRY)
 
-/*******************************
- * Instruction associated data *
- *******************************/
-
-/* Do not call the following macros in an instruction if you modified PC! */
-#define I8080_D8(cpu) ((cpu)->memory[(cpu)->pc - 1])
-#define I8080_D16(cpu) ((uint16_t)(cpu)->memory[(cpu)->pc - 1] << 8 | (cpu)->memory[(cpu)->pc - 2])
-#define I8080_A16(cpu) I8080_D16(cpu)
+/*****************
+ * Memory access *
+ *****************/
 
 static inline void
 i8080_cpu_store8(struct i8080_cpu *cpu, uint16_t address, uint8_t src) {
@@ -65,40 +60,40 @@ i8080_cpu_load16(const struct i8080_cpu *cpu, uint16_t address, uint16_t *dst) {
 /* NOP */
 
 static bool
-i8080_cpu_instruction_nop(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_nop(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return false;
 }
 
 /* LXI */
 
 static bool
-i8080_cpu_instruction_lxi_b_d16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_lxi_b_d16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->registers.pair.b = I8080_D16(cpu);
-
-	return false;
-}
-
-static bool
-i8080_cpu_instruction_lxi_d_d16(struct i8080_cpu *cpu) {
-
-	cpu->registers.pair.d = I8080_D16(cpu);
+	cpu->registers.pair.b = imm.d16;
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_lxi_h_d16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_lxi_d_d16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->registers.pair.h = I8080_D16(cpu);
+	cpu->registers.pair.d = imm.d16;
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_lxi_sp_d16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_lxi_h_d16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->sp = I8080_D16(cpu);
+	cpu->registers.pair.h = imm.d16;
+
+	return false;
+}
+
+static bool
+i8080_cpu_instruction_lxi_sp_d16(struct i8080_cpu *cpu, union i8080_imm imm) {
+
+	cpu->sp = imm.d16;
 
 	return false;
 }
@@ -106,7 +101,7 @@ i8080_cpu_instruction_lxi_sp_d16(struct i8080_cpu *cpu) {
 /* STAX */
 
 static bool
-i8080_cpu_instruction_stax_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_stax_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.b, cpu->registers.a);
 
@@ -114,7 +109,7 @@ i8080_cpu_instruction_stax_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_stax_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_stax_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.d, cpu->registers.a);
 
@@ -124,7 +119,7 @@ i8080_cpu_instruction_stax_d(struct i8080_cpu *cpu) {
 /* INX */
 
 static bool
-i8080_cpu_instruction_inx_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inx_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.pair.b++;
 
@@ -132,7 +127,7 @@ i8080_cpu_instruction_inx_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_inx_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inx_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.pair.d++;
 
@@ -140,7 +135,7 @@ i8080_cpu_instruction_inx_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_inx_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inx_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.pair.h++;
 
@@ -148,7 +143,7 @@ i8080_cpu_instruction_inx_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_inx_sp(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inx_sp(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->sp++;
 
@@ -172,37 +167,37 @@ i8080_cpu_instruction_inr(struct i8080_cpu *cpu, uint8_t *dst) {
 }
 
 static bool
-i8080_cpu_instruction_inr_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inr_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_inr(cpu, &cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_inr_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inr_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_inr(cpu, &cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_inr_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inr_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_inr(cpu, &cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_inr_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inr_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_inr(cpu, &cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_inr_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inr_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_inr(cpu, &cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_inr_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inr_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_inr(cpu, &cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_inr_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inr_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	bool jumped;
 	uint8_t m;
 
@@ -214,7 +209,7 @@ i8080_cpu_instruction_inr_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_inr_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_inr_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_inr(cpu, &cpu->registers.a);
 }
 
@@ -235,37 +230,37 @@ i8080_cpu_instruction_dcr(struct i8080_cpu *cpu, uint8_t *dst) {
 }
 
 static bool
-i8080_cpu_instruction_dcr_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcr_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dcr(cpu, &cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_dcr_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcr_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dcr(cpu, &cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_dcr_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcr_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dcr(cpu, &cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_dcr_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcr_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dcr(cpu, &cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_dcr_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcr_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dcr(cpu, &cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_dcr_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcr_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dcr(cpu, &cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_dcr_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcr_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	bool jumped;
 	uint8_t m;
 
@@ -277,72 +272,72 @@ i8080_cpu_instruction_dcr_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_dcr_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcr_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dcr(cpu, &cpu->registers.a);
 }
 
 /* MVI */
 
 static bool
-i8080_cpu_instruction_mvi_b_d8(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mvi_b_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->registers.b = I8080_D8(cpu);
-
-	return false;
-}
-
-static bool
-i8080_cpu_instruction_mvi_c_d8(struct i8080_cpu *cpu) {
-
-	cpu->registers.c = I8080_D8(cpu);
+	cpu->registers.b = imm.d8;
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_mvi_d_d8(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mvi_c_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->registers.d = I8080_D8(cpu);
-
-	return false;
-}
-
-static bool
-i8080_cpu_instruction_mvi_e_d8(struct i8080_cpu *cpu) {
-
-	cpu->registers.e = I8080_D8(cpu);
+	cpu->registers.c = imm.d8;
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_mvi_h_d8(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mvi_d_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->registers.h = I8080_D8(cpu);
-
-	return false;
-}
-
-static bool
-i8080_cpu_instruction_mvi_l_d8(struct i8080_cpu *cpu) {
-
-	cpu->registers.l = I8080_D8(cpu);
+	cpu->registers.d = imm.d8;
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_mvi_m_d8(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mvi_e_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	i8080_cpu_store8(cpu, cpu->registers.pair.h, I8080_D8(cpu));
+	cpu->registers.e = imm.d8;
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_mvi_a_d8(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mvi_h_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->registers.a = I8080_D8(cpu);
+	cpu->registers.h = imm.d8;
+
+	return false;
+}
+
+static bool
+i8080_cpu_instruction_mvi_l_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+
+	cpu->registers.l = imm.d8;
+
+	return false;
+}
+
+static bool
+i8080_cpu_instruction_mvi_m_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+
+	i8080_cpu_store8(cpu, cpu->registers.pair.h, imm.d8);
+
+	return false;
+}
+
+static bool
+i8080_cpu_instruction_mvi_a_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+
+	cpu->registers.a = imm.d8;
 
 	return false;
 }
@@ -350,7 +345,7 @@ i8080_cpu_instruction_mvi_a_d8(struct i8080_cpu *cpu) {
 /* RLC */
 
 static bool
-i8080_cpu_instruction_rlc(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rlc(struct i8080_cpu *cpu, union i8080_imm imm) {
 	const uint8_t carry = cpu->registers.a >> 7;
 
 	cpu->registers.f = cpu->registers.f & ~I8080_MASK_CONDITION_CARRY
@@ -374,29 +369,29 @@ i8080_cpu_instruction_dad(struct i8080_cpu *cpu, uint16_t src) {
 }
 
 static bool
-i8080_cpu_instruction_dad_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dad_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dad(cpu, cpu->registers.pair.b);
 }
 
 static bool
-i8080_cpu_instruction_dad_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dad_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dad(cpu, cpu->registers.pair.d);
 }
 
 static bool
-i8080_cpu_instruction_dad_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dad_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dad(cpu, cpu->registers.pair.h);
 }
 
 static bool
-i8080_cpu_instruction_dad_sp(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dad_sp(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_dad(cpu, cpu->sp);
 }
 
 /* LDAX */
 
 static bool
-i8080_cpu_instruction_ldax_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ldax_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.b, &cpu->registers.a);
 
@@ -404,7 +399,7 @@ i8080_cpu_instruction_ldax_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_ldax_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ldax_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.d, &cpu->registers.a);
 
@@ -414,7 +409,7 @@ i8080_cpu_instruction_ldax_d(struct i8080_cpu *cpu) {
 /* DCX */
 
 static bool
-i8080_cpu_instruction_dcx_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcx_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.pair.b--;
 
@@ -422,7 +417,7 @@ i8080_cpu_instruction_dcx_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_dcx_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcx_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.pair.d--;
 
@@ -430,7 +425,7 @@ i8080_cpu_instruction_dcx_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_dcx_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcx_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.pair.h--;
 
@@ -438,7 +433,7 @@ i8080_cpu_instruction_dcx_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_dcx_sp(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_dcx_sp(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->sp--;
 
@@ -448,7 +443,7 @@ i8080_cpu_instruction_dcx_sp(struct i8080_cpu *cpu) {
 /* RRC */
 
 static bool
-i8080_cpu_instruction_rrc(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rrc(struct i8080_cpu *cpu, union i8080_imm imm) {
 	const uint8_t carry = cpu->registers.a & 1;
 
 	cpu->registers.f = cpu->registers.f & ~I8080_MASK_CONDITION_CARRY
@@ -461,7 +456,7 @@ i8080_cpu_instruction_rrc(struct i8080_cpu *cpu) {
 /* RAL */
 
 static bool
-i8080_cpu_instruction_ral(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ral(struct i8080_cpu *cpu, union i8080_imm imm) {
 	const uint8_t lsbit = (cpu->registers.f & I8080_MASK_CONDITION_CARRY) >> I8080_BIT_CONDITION_CARRY;
 	const uint8_t carry = cpu->registers.a >> 7;
 
@@ -475,7 +470,7 @@ i8080_cpu_instruction_ral(struct i8080_cpu *cpu) {
 /* RAR */
 
 static bool
-i8080_cpu_instruction_rar(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rar(struct i8080_cpu *cpu, union i8080_imm imm) {
 	const uint8_t msbit = (cpu->registers.f & I8080_MASK_CONDITION_CARRY) << (7 - I8080_BIT_CONDITION_CARRY);
 	const uint8_t carry = cpu->registers.a & 1;
 
@@ -489,9 +484,9 @@ i8080_cpu_instruction_rar(struct i8080_cpu *cpu) {
 /* SHLD */
 
 static bool
-i8080_cpu_instruction_shld_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_shld_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	i8080_cpu_store16(cpu, I8080_A16(cpu), cpu->registers.pair.h);
+	i8080_cpu_store16(cpu, imm.a16, cpu->registers.pair.h);
 
 	return false;
 }
@@ -499,18 +494,19 @@ i8080_cpu_instruction_shld_a16(struct i8080_cpu *cpu) {
 /* DAA */
 
 static bool
-i8080_cpu_instruction_daa(struct i8080_cpu *cpu) {
-	/* TODO */
-	uint8_t src = 0;
+i8080_cpu_instruction_daa(struct i8080_cpu *cpu, union i8080_imm imm) {
+	uint8_t low = cpu->registers.a & 0x0F, src = 0, carry = 0;
 
-	if((cpu->registers.a & 0xF) > 9
+	if(low > 9
 		|| (cpu->registers.f & I8080_MASK_CONDITION_AUXILIARY_CARRY) != 0) {
 		src |= 0x06;
+		low += src;
 	}
 
-	if((cpu->registers.a + src) >> 4 > 9
+	if(((cpu->registers.a >> 4) + (low >> 4)) > 9
 		|| (cpu->registers.f & I8080_MASK_CONDITION_CARRY) != 0) {
 		src |= 0x60;
+		carry = I8080_MASK_CONDITION_CARRY;
 	}
 
 	const uint8_t res = cpu->registers.a + src;
@@ -520,7 +516,7 @@ i8080_cpu_instruction_daa(struct i8080_cpu *cpu) {
 		| I8080_CONDITION_ZERO(res)
 		| I8080_CONDITION_AUXILIARY_CARRY(cpu->registers.a, src, res)
 		| I8080_CONDITION_PARITY(res)
-		| I8080_CONDITION_CARRY(cpu->registers.a, src, res);
+		| carry;
 	cpu->registers.a = res;
 
 	return false;
@@ -529,9 +525,9 @@ i8080_cpu_instruction_daa(struct i8080_cpu *cpu) {
 /* LHLD */
 
 static bool
-i8080_cpu_instruction_lhld_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_lhld_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	i8080_cpu_load16(cpu, I8080_A16(cpu), &cpu->registers.pair.h);
+	i8080_cpu_load16(cpu, imm.a16, &cpu->registers.pair.h);
 
 	return false;
 }
@@ -539,7 +535,7 @@ i8080_cpu_instruction_lhld_a16(struct i8080_cpu *cpu) {
 /* CMA */
 
 static bool
-i8080_cpu_instruction_cma(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cma(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.a = ~cpu->registers.a;
 
@@ -549,9 +545,9 @@ i8080_cpu_instruction_cma(struct i8080_cpu *cpu) {
 /* STA */
 
 static bool
-i8080_cpu_instruction_sta_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sta_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	i8080_cpu_store8(cpu, I8080_A16(cpu), cpu->registers.a);
+	i8080_cpu_store8(cpu, imm.a16, cpu->registers.a);
 
 	return false;
 }
@@ -559,7 +555,7 @@ i8080_cpu_instruction_sta_a16(struct i8080_cpu *cpu) {
 /* STC */
 
 static bool
-i8080_cpu_instruction_stc(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_stc(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.f |= I8080_MASK_CONDITION_CARRY;
 
@@ -569,9 +565,9 @@ i8080_cpu_instruction_stc(struct i8080_cpu *cpu) {
 /* LDA */
 
 static bool
-i8080_cpu_instruction_lda_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_lda_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	i8080_cpu_load8(cpu, I8080_A16(cpu), &cpu->registers.a);
+	i8080_cpu_load8(cpu, imm.a16, &cpu->registers.a);
 
 	return false;
 }
@@ -579,7 +575,7 @@ i8080_cpu_instruction_lda_a16(struct i8080_cpu *cpu) {
 /* CMC */
 
 static bool
-i8080_cpu_instruction_cmc(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmc(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.f ^= I8080_MASK_CONDITION_CARRY;
 
@@ -589,7 +585,7 @@ i8080_cpu_instruction_cmc(struct i8080_cpu *cpu) {
 /* MOV */
 
 static bool
-i8080_cpu_instruction_mov_b_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_b_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.b = cpu->registers.b;
 
@@ -597,7 +593,7 @@ i8080_cpu_instruction_mov_b_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_b_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_b_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.b = cpu->registers.c;
 
@@ -605,7 +601,7 @@ i8080_cpu_instruction_mov_b_c(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_b_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_b_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.b = cpu->registers.d;
 
@@ -613,7 +609,7 @@ i8080_cpu_instruction_mov_b_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_b_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_b_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.b = cpu->registers.e;
 
@@ -621,7 +617,7 @@ i8080_cpu_instruction_mov_b_e(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_b_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_b_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.b = cpu->registers.h;
 
@@ -629,7 +625,7 @@ i8080_cpu_instruction_mov_b_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_b_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_b_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.b = cpu->registers.l;
 
@@ -637,7 +633,7 @@ i8080_cpu_instruction_mov_b_l(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_b_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_b_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &cpu->registers.b);
 
@@ -645,7 +641,7 @@ i8080_cpu_instruction_mov_b_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_b_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_b_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.b = cpu->registers.a;
 
@@ -653,7 +649,7 @@ i8080_cpu_instruction_mov_b_a(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_c_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_c_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.c = cpu->registers.b;
 
@@ -661,7 +657,7 @@ i8080_cpu_instruction_mov_c_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_c_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_c_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.c = cpu->registers.c;
 
@@ -669,7 +665,7 @@ i8080_cpu_instruction_mov_c_c(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_c_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_c_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.c = cpu->registers.d;
 
@@ -677,7 +673,7 @@ i8080_cpu_instruction_mov_c_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_c_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_c_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.c = cpu->registers.e;
 
@@ -685,7 +681,7 @@ i8080_cpu_instruction_mov_c_e(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_c_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_c_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.c = cpu->registers.h;
 
@@ -693,7 +689,7 @@ i8080_cpu_instruction_mov_c_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_c_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_c_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.c = cpu->registers.l;
 
@@ -701,7 +697,7 @@ i8080_cpu_instruction_mov_c_l(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_c_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_c_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &cpu->registers.c);
 
@@ -709,7 +705,7 @@ i8080_cpu_instruction_mov_c_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_c_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_c_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.c = cpu->registers.a;
 
@@ -717,7 +713,7 @@ i8080_cpu_instruction_mov_c_a(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_d_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_d_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.d = cpu->registers.b;
 
@@ -725,7 +721,7 @@ i8080_cpu_instruction_mov_d_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_d_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_d_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.d = cpu->registers.c;
 
@@ -733,7 +729,7 @@ i8080_cpu_instruction_mov_d_c(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_d_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_d_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.d = cpu->registers.d;
 
@@ -741,7 +737,7 @@ i8080_cpu_instruction_mov_d_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_d_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_d_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.d = cpu->registers.e;
 
@@ -749,7 +745,7 @@ i8080_cpu_instruction_mov_d_e(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_d_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_d_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.d = cpu->registers.h;
 
@@ -757,7 +753,7 @@ i8080_cpu_instruction_mov_d_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_d_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_d_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.d = cpu->registers.l;
 
@@ -765,7 +761,7 @@ i8080_cpu_instruction_mov_d_l(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_d_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_d_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &cpu->registers.d);
 
@@ -773,7 +769,7 @@ i8080_cpu_instruction_mov_d_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_d_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_d_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.d = cpu->registers.a;
 
@@ -781,7 +777,7 @@ i8080_cpu_instruction_mov_d_a(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_e_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_e_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.e = cpu->registers.b;
 
@@ -789,7 +785,7 @@ i8080_cpu_instruction_mov_e_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_e_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_e_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.e = cpu->registers.c;
 
@@ -797,7 +793,7 @@ i8080_cpu_instruction_mov_e_c(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_e_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_e_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.e = cpu->registers.d;
 
@@ -805,7 +801,7 @@ i8080_cpu_instruction_mov_e_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_e_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_e_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.e = cpu->registers.e;
 
@@ -813,7 +809,7 @@ i8080_cpu_instruction_mov_e_e(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_e_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_e_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.e = cpu->registers.h;
 
@@ -821,7 +817,7 @@ i8080_cpu_instruction_mov_e_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_e_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_e_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.e = cpu->registers.l;
 
@@ -829,7 +825,7 @@ i8080_cpu_instruction_mov_e_l(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_e_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_e_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &cpu->registers.e);
 
@@ -837,7 +833,7 @@ i8080_cpu_instruction_mov_e_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_e_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_e_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.e = cpu->registers.a;
 
@@ -845,7 +841,7 @@ i8080_cpu_instruction_mov_e_a(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_h_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_h_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.h = cpu->registers.b;
 
@@ -853,7 +849,7 @@ i8080_cpu_instruction_mov_h_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_h_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_h_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.h = cpu->registers.c;
 
@@ -861,7 +857,7 @@ i8080_cpu_instruction_mov_h_c(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_h_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_h_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.h = cpu->registers.d;
 
@@ -869,7 +865,7 @@ i8080_cpu_instruction_mov_h_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_h_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_h_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.h = cpu->registers.e;
 
@@ -877,7 +873,7 @@ i8080_cpu_instruction_mov_h_e(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_h_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_h_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.h = cpu->registers.h;
 
@@ -885,7 +881,7 @@ i8080_cpu_instruction_mov_h_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_h_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_h_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.h = cpu->registers.l;
 
@@ -893,7 +889,7 @@ i8080_cpu_instruction_mov_h_l(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_h_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_h_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &cpu->registers.h);
 
@@ -901,7 +897,7 @@ i8080_cpu_instruction_mov_h_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_h_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_h_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.h = cpu->registers.a;
 
@@ -909,7 +905,7 @@ i8080_cpu_instruction_mov_h_a(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_l_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_l_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.l = cpu->registers.b;
 
@@ -917,7 +913,7 @@ i8080_cpu_instruction_mov_l_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_l_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_l_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.l = cpu->registers.c;
 
@@ -925,7 +921,7 @@ i8080_cpu_instruction_mov_l_c(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_l_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_l_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.l = cpu->registers.d;
 
@@ -933,7 +929,7 @@ i8080_cpu_instruction_mov_l_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_l_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_l_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.l = cpu->registers.e;
 
@@ -941,7 +937,7 @@ i8080_cpu_instruction_mov_l_e(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_l_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_l_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.l = cpu->registers.h;
 
@@ -949,7 +945,7 @@ i8080_cpu_instruction_mov_l_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_l_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_l_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.l = cpu->registers.l;
 
@@ -957,7 +953,7 @@ i8080_cpu_instruction_mov_l_l(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_l_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_l_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &cpu->registers.l);
 
@@ -965,7 +961,7 @@ i8080_cpu_instruction_mov_l_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_l_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_l_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.l = cpu->registers.a;
 
@@ -973,7 +969,7 @@ i8080_cpu_instruction_mov_l_a(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_m_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_m_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.h, cpu->registers.b);
 
@@ -981,7 +977,7 @@ i8080_cpu_instruction_mov_m_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_m_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_m_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.h, cpu->registers.c);
 
@@ -989,7 +985,7 @@ i8080_cpu_instruction_mov_m_c(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_m_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_m_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.h, cpu->registers.d);
 
@@ -997,7 +993,7 @@ i8080_cpu_instruction_mov_m_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_m_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_m_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.h, cpu->registers.e);
 
@@ -1005,7 +1001,7 @@ i8080_cpu_instruction_mov_m_e(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_m_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_m_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.h, cpu->registers.h);
 
@@ -1013,7 +1009,7 @@ i8080_cpu_instruction_mov_m_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_m_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_m_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.h, cpu->registers.l);
 
@@ -1021,7 +1017,7 @@ i8080_cpu_instruction_mov_m_l(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_m_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_m_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_store8(cpu, cpu->registers.pair.h, cpu->registers.a);
 
@@ -1029,7 +1025,7 @@ i8080_cpu_instruction_mov_m_a(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_a_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_a_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.a = cpu->registers.b;
 
@@ -1037,7 +1033,7 @@ i8080_cpu_instruction_mov_a_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_a_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_a_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.a = cpu->registers.c;
 
@@ -1045,7 +1041,7 @@ i8080_cpu_instruction_mov_a_c(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_a_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_a_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.a = cpu->registers.d;
 
@@ -1053,7 +1049,7 @@ i8080_cpu_instruction_mov_a_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_a_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_a_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.a = cpu->registers.e;
 
@@ -1061,7 +1057,7 @@ i8080_cpu_instruction_mov_a_e(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_a_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_a_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.a = cpu->registers.h;
 
@@ -1069,7 +1065,7 @@ i8080_cpu_instruction_mov_a_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_a_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_a_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.a = cpu->registers.l;
 
@@ -1077,7 +1073,7 @@ i8080_cpu_instruction_mov_a_l(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_a_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_a_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &cpu->registers.a);
 
@@ -1085,7 +1081,7 @@ i8080_cpu_instruction_mov_a_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_mov_a_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_mov_a_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->registers.a = cpu->registers.a;
 
@@ -1095,9 +1091,9 @@ i8080_cpu_instruction_mov_a_a(struct i8080_cpu *cpu) {
 /* HLT */
 
 static bool
-i8080_cpu_instruction_hlt(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_hlt(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->state.stopped = 1;
+	cpu->stopped = 1;
 
 	return false;
 }
@@ -1120,37 +1116,37 @@ i8080_cpu_instruction_add(struct i8080_cpu *cpu, uint8_t src) {
 }
 
 static bool
-i8080_cpu_instruction_add_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_add_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_add(cpu, cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_add_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_add_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_add(cpu, cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_add_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_add_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_add(cpu, cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_add_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_add_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_add(cpu, cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_add_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_add_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_add(cpu, cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_add_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_add_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_add(cpu, cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_add_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_add_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint8_t m;
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &m);
@@ -1159,15 +1155,15 @@ i8080_cpu_instruction_add_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_add_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_add_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_add(cpu, cpu->registers.a);
 }
 
 /* ADI */
 
 static bool
-i8080_cpu_instruction_adi_d8(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_add(cpu, I8080_D8(cpu));
+i8080_cpu_instruction_adi_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_add(cpu, imm.d8);
 }
 
 /* ADC */
@@ -1192,37 +1188,37 @@ i8080_cpu_instruction_adc(struct i8080_cpu *cpu, uint8_t src) {
 }
 
 static bool
-i8080_cpu_instruction_adc_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_adc_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_adc(cpu, cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_adc_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_adc_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_adc(cpu, cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_adc_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_adc_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_adc(cpu, cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_adc_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_adc_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_adc(cpu, cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_adc_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_adc_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_adc(cpu, cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_adc_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_adc_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_adc(cpu, cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_adc_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_adc_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint8_t m;
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &m);
@@ -1231,15 +1227,15 @@ i8080_cpu_instruction_adc_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_adc_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_adc_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_adc(cpu, cpu->registers.a);
 }
 
 /* ACI */
 
 static bool
-i8080_cpu_instruction_aci_d8(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_adc(cpu, I8080_D8(cpu));
+i8080_cpu_instruction_aci_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_adc(cpu, imm.d8);
 }
 
 /* SUB */
@@ -1260,37 +1256,37 @@ i8080_cpu_instruction_sub(struct i8080_cpu *cpu, uint8_t src) {
 }
 
 static bool
-i8080_cpu_instruction_sub_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sub_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sub(cpu, cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_sub_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sub_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sub(cpu, cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_sub_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sub_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sub(cpu, cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_sub_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sub_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sub(cpu, cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_sub_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sub_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sub(cpu, cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_sub_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sub_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sub(cpu, cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_sub_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sub_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint8_t m;
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &m);
@@ -1299,15 +1295,15 @@ i8080_cpu_instruction_sub_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_sub_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sub_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sub(cpu, cpu->registers.a);
 }
 
 /* SUI */
 
 static bool
-i8080_cpu_instruction_sui_d8(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_sub(cpu, I8080_D8(cpu));
+i8080_cpu_instruction_sui_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_sub(cpu, imm.d8);
 }
 
 /* SBB */
@@ -1332,37 +1328,37 @@ i8080_cpu_instruction_sbb(struct i8080_cpu *cpu, uint8_t src) {
 }
 
 static bool
-i8080_cpu_instruction_sbb_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sbb_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sbb(cpu, cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_sbb_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sbb_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sbb(cpu, cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_sbb_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sbb_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sbb(cpu, cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_sbb_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sbb_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sbb(cpu, cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_sbb_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sbb_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sbb(cpu, cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_sbb_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sbb_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sbb(cpu, cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_sbb_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sbb_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint8_t m;
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &m);
@@ -1371,15 +1367,15 @@ i8080_cpu_instruction_sbb_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_sbb_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sbb_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_sbb(cpu, cpu->registers.a);
 }
 
 /* SBI */
 
 static bool
-i8080_cpu_instruction_sbi_d8(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_sbb(cpu, I8080_D8(cpu));
+i8080_cpu_instruction_sbi_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_sbb(cpu, imm.d8);
 }
 
 /* ANA */
@@ -1399,37 +1395,37 @@ i8080_cpu_instruction_ana(struct i8080_cpu *cpu, uint8_t src) {
 }
 
 static bool
-i8080_cpu_instruction_ana_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ana_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ana(cpu, cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_ana_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ana_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ana(cpu, cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_ana_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ana_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ana(cpu, cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_ana_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ana_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ana(cpu, cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_ana_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ana_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ana(cpu, cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_ana_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ana_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ana(cpu, cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_ana_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ana_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint8_t m;
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &m);
@@ -1438,15 +1434,15 @@ i8080_cpu_instruction_ana_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_ana_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ana_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ana(cpu, cpu->registers.a);
 }
 
 /* ANI */
 
 static bool
-i8080_cpu_instruction_ani_d8(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_ana(cpu, I8080_D8(cpu));
+i8080_cpu_instruction_ani_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_ana(cpu, imm.d8);
 }
 
 /* XRA */
@@ -1465,37 +1461,37 @@ i8080_cpu_instruction_xra(struct i8080_cpu *cpu, uint8_t src) {
 }
 
 static bool
-i8080_cpu_instruction_xra_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xra_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_xra(cpu, cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_xra_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xra_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_xra(cpu, cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_xra_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xra_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_xra(cpu, cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_xra_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xra_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_xra(cpu, cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_xra_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xra_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_xra(cpu, cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_xra_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xra_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_xra(cpu, cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_xra_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xra_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint8_t m;
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &m);
@@ -1504,15 +1500,15 @@ i8080_cpu_instruction_xra_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_xra_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xra_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_xra(cpu, cpu->registers.a);
 }
 
 /* XRI */
 
 static bool
-i8080_cpu_instruction_xri_d8(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_xra(cpu, I8080_D8(cpu));
+i8080_cpu_instruction_xri_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_xra(cpu, imm.d8);
 }
 
 /* ORA */
@@ -1531,37 +1527,37 @@ i8080_cpu_instruction_ora(struct i8080_cpu *cpu, uint8_t src) {
 }
 
 static bool
-i8080_cpu_instruction_ora_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ora_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ora(cpu, cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_ora_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ora_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ora(cpu, cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_ora_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ora_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ora(cpu, cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_ora_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ora_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ora(cpu, cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_ora_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ora_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ora(cpu, cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_ora_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ora_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ora(cpu, cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_ora_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ora_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint8_t m;
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &m);
@@ -1570,15 +1566,15 @@ i8080_cpu_instruction_ora_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_ora_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ora_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_ora(cpu, cpu->registers.a);
 }
 
 /* ORI */
 
 static bool
-i8080_cpu_instruction_ori_d8(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_ora(cpu, I8080_D8(cpu));
+i8080_cpu_instruction_ori_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_ora(cpu, imm.d8);
 }
 
 /* CMP */
@@ -1598,37 +1594,37 @@ i8080_cpu_instruction_cmp(struct i8080_cpu *cpu, uint8_t src) {
 }
 
 static bool
-i8080_cpu_instruction_cmp_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmp_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_cmp(cpu, cpu->registers.b);
 }
 
 static bool
-i8080_cpu_instruction_cmp_c(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmp_c(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_cmp(cpu, cpu->registers.c);
 }
 
 static bool
-i8080_cpu_instruction_cmp_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmp_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_cmp(cpu, cpu->registers.d);
 }
 
 static bool
-i8080_cpu_instruction_cmp_e(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmp_e(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_cmp(cpu, cpu->registers.e);
 }
 
 static bool
-i8080_cpu_instruction_cmp_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmp_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_cmp(cpu, cpu->registers.h);
 }
 
 static bool
-i8080_cpu_instruction_cmp_l(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmp_l(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_cmp(cpu, cpu->registers.l);
 }
 
 static bool
-i8080_cpu_instruction_cmp_m(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmp_m(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint8_t m;
 
 	i8080_cpu_load8(cpu, cpu->registers.pair.h, &m);
@@ -1637,21 +1633,21 @@ i8080_cpu_instruction_cmp_m(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_cmp_a(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cmp_a(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_cmp(cpu, cpu->registers.a);
 }
 
 /* CPI */
 
 static bool
-i8080_cpu_instruction_cpi_d8(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_cmp(cpu, I8080_D8(cpu));
+i8080_cpu_instruction_cpi_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_cmp(cpu, imm.d8);
 }
 
 /* RET... */
 
 static inline bool
-i8080_cpu_instruction_ret(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ret(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load16(cpu, cpu->sp, &cpu->pc);
 	cpu->sp += sizeof(uint16_t);
@@ -1660,80 +1656,80 @@ i8080_cpu_instruction_ret(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_rnz(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rnz(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_ZERO)) {
-		return i8080_cpu_instruction_ret(cpu);
+		return i8080_cpu_instruction_ret(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_rz(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rz(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_ZERO) {
-		return i8080_cpu_instruction_ret(cpu);
+		return i8080_cpu_instruction_ret(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_rnc(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rnc(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_CARRY)) {
-		return i8080_cpu_instruction_ret(cpu);
+		return i8080_cpu_instruction_ret(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_rc(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rc(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_CARRY) {
-		return i8080_cpu_instruction_ret(cpu);
+		return i8080_cpu_instruction_ret(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_rpo(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rpo(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_PARITY)) {
-		return i8080_cpu_instruction_ret(cpu);
+		return i8080_cpu_instruction_ret(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_rpe(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rpe(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_PARITY) {
-		return i8080_cpu_instruction_ret(cpu);
+		return i8080_cpu_instruction_ret(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_rp(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rp(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_SIGN)) {
-		return i8080_cpu_instruction_ret(cpu);
+		return i8080_cpu_instruction_ret(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_rm(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rm(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_SIGN) {
-		return i8080_cpu_instruction_ret(cpu);
+		return i8080_cpu_instruction_ret(cpu, imm);
 	}
 
 	return false;
@@ -1742,7 +1738,7 @@ i8080_cpu_instruction_rm(struct i8080_cpu *cpu) {
 /* POP */
 
 static bool
-i8080_cpu_instruction_pop_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_pop_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load16(cpu, cpu->sp, &cpu->registers.pair.b);
 	cpu->sp += sizeof(uint16_t);
@@ -1751,7 +1747,7 @@ i8080_cpu_instruction_pop_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_pop_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_pop_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load16(cpu, cpu->sp, &cpu->registers.pair.d);
 	cpu->sp += sizeof(uint16_t);
@@ -1760,7 +1756,7 @@ i8080_cpu_instruction_pop_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_pop_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_pop_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load16(cpu, cpu->sp, &cpu->registers.pair.h);
 	cpu->sp += sizeof(uint16_t);
@@ -1769,7 +1765,7 @@ i8080_cpu_instruction_pop_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_pop_psw(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_pop_psw(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	i8080_cpu_load16(cpu, cpu->sp, &cpu->registers.pair.psw);
 	cpu->registers.f = cpu->registers.f & I8080_MASK_CONDITIONS_SZ_A_P_C | I8080_MASK_CONDITION_UNUSED1;
@@ -1781,88 +1777,88 @@ i8080_cpu_instruction_pop_psw(struct i8080_cpu *cpu) {
 /* JMP... */
 
 static inline bool
-i8080_cpu_instruction_jmp_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jmp_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	cpu->pc = I8080_A16(cpu);
+	cpu->pc = imm.a16;
 
 	return true;
 }
 
 static bool
-i8080_cpu_instruction_jnz_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jnz_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_ZERO)) {
-		return i8080_cpu_instruction_jmp_a16(cpu);
+		return i8080_cpu_instruction_jmp_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_jz_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jz_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_ZERO) {
-		return i8080_cpu_instruction_jmp_a16(cpu);
+		return i8080_cpu_instruction_jmp_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_jnc_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jnc_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_CARRY)) {
-		return i8080_cpu_instruction_jmp_a16(cpu);
+		return i8080_cpu_instruction_jmp_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_jc_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jc_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_CARRY) {
-		return i8080_cpu_instruction_jmp_a16(cpu);
+		return i8080_cpu_instruction_jmp_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_jpo_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jpo_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_PARITY)) {
-		return i8080_cpu_instruction_jmp_a16(cpu);
+		return i8080_cpu_instruction_jmp_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_jpe_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jpe_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_PARITY) {
-		return i8080_cpu_instruction_jmp_a16(cpu);
+		return i8080_cpu_instruction_jmp_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_jp_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jp_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_SIGN)) {
-		return i8080_cpu_instruction_jmp_a16(cpu);
+		return i8080_cpu_instruction_jmp_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_jm_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_jm_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_SIGN) {
-		return i8080_cpu_instruction_jmp_a16(cpu);
+		return i8080_cpu_instruction_jmp_a16(cpu, imm);
 	}
 
 	return false;
@@ -1881,85 +1877,85 @@ i8080_cpu_instruction_call(struct i8080_cpu *cpu, uint16_t address) {
 }
 
 static inline bool
-i8080_cpu_instruction_call_a16(struct i8080_cpu *cpu) {
-	return i8080_cpu_instruction_call(cpu, I8080_A16(cpu));
+i8080_cpu_instruction_call_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
+	return i8080_cpu_instruction_call(cpu, imm.a16);
 }
 
 static bool
-i8080_cpu_instruction_cnz_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cnz_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_ZERO)) {
-		return i8080_cpu_instruction_call_a16(cpu);
+		return i8080_cpu_instruction_call_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_cz_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cz_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_ZERO) {
-		return i8080_cpu_instruction_call_a16(cpu);
+		return i8080_cpu_instruction_call_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_cnc_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cnc_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_CARRY)) {
-		return i8080_cpu_instruction_call_a16(cpu);
+		return i8080_cpu_instruction_call_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_cc_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cc_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_CARRY) {
-		return i8080_cpu_instruction_call_a16(cpu);
+		return i8080_cpu_instruction_call_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_cpo_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cpo_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_PARITY)) {
-		return i8080_cpu_instruction_call_a16(cpu);
+		return i8080_cpu_instruction_call_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_cpe_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cpe_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_PARITY) {
-		return i8080_cpu_instruction_call_a16(cpu);
+		return i8080_cpu_instruction_call_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_cp_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cp_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(!(cpu->registers.f & I8080_MASK_CONDITION_SIGN)) {
-		return i8080_cpu_instruction_call_a16(cpu);
+		return i8080_cpu_instruction_call_a16(cpu, imm);
 	}
 
 	return false;
 }
 
 static bool
-i8080_cpu_instruction_cm_a16(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_cm_a16(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	if(cpu->registers.f & I8080_MASK_CONDITION_SIGN) {
-		return i8080_cpu_instruction_call_a16(cpu);
+		return i8080_cpu_instruction_call_a16(cpu, imm);
 	}
 
 	return false;
@@ -1968,7 +1964,7 @@ i8080_cpu_instruction_cm_a16(struct i8080_cpu *cpu) {
 /* PUSH */
 
 static bool
-i8080_cpu_instruction_push_b(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_push_b(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->sp -= sizeof(uint16_t);
 	i8080_cpu_store16(cpu, cpu->sp, cpu->registers.pair.b);
@@ -1977,7 +1973,7 @@ i8080_cpu_instruction_push_b(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_push_d(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_push_d(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->sp -= sizeof(uint16_t);
 	i8080_cpu_store16(cpu, cpu->sp, cpu->registers.pair.d);
@@ -1986,7 +1982,7 @@ i8080_cpu_instruction_push_d(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_push_h(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_push_h(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->sp -= sizeof(uint16_t);
 	i8080_cpu_store16(cpu, cpu->sp, cpu->registers.pair.h);
@@ -1995,7 +1991,7 @@ i8080_cpu_instruction_push_h(struct i8080_cpu *cpu) {
 }
 
 static bool
-i8080_cpu_instruction_push_psw(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_push_psw(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->sp -= sizeof(uint16_t);
 	i8080_cpu_store16(cpu, cpu->sp, cpu->registers.pair.psw);
@@ -2006,49 +2002,49 @@ i8080_cpu_instruction_push_psw(struct i8080_cpu *cpu) {
 /* RST */
 
 static bool
-i8080_cpu_instruction_rst_0(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rst_0(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_call(cpu, 0x00);
 }
 
 static bool
-i8080_cpu_instruction_rst_1(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rst_1(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_call(cpu, 0x08);
 }
 
 static bool
-i8080_cpu_instruction_rst_2(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rst_2(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_call(cpu, 0x10);
 }
 
 static bool
-i8080_cpu_instruction_rst_3(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rst_3(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_call(cpu, 0x18);
 }
 
 static bool
-i8080_cpu_instruction_rst_4(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rst_4(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_call(cpu, 0x20);
 }
 
 static bool
-i8080_cpu_instruction_rst_5(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rst_5(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_call(cpu, 0x28);
 }
 
 static bool
-i8080_cpu_instruction_rst_6(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rst_6(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_call(cpu, 0x30);
 }
 
 static bool
-i8080_cpu_instruction_rst_7(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_rst_7(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return i8080_cpu_instruction_call(cpu, 0x38);
 }
 
 /* OUT */
 
 static bool
-i8080_cpu_instruction_out_d8(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_out_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	/* TODO */
 
@@ -2058,7 +2054,7 @@ i8080_cpu_instruction_out_d8(struct i8080_cpu *cpu) {
 /* IN */
 
 static bool
-i8080_cpu_instruction_in_d8(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_in_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	/* TODO */
 
@@ -2068,7 +2064,7 @@ i8080_cpu_instruction_in_d8(struct i8080_cpu *cpu) {
 /* XTHL */
 
 static bool
-i8080_cpu_instruction_xthl(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xthl(struct i8080_cpu *cpu, union i8080_imm imm) {
 	uint16_t swap;
 
 	i8080_cpu_load16(cpu, cpu->sp, &swap);
@@ -2081,7 +2077,7 @@ i8080_cpu_instruction_xthl(struct i8080_cpu *cpu) {
 /* PCHL */
 
 static bool
-i8080_cpu_instruction_pchl(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_pchl(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->pc = cpu->registers.pair.h;
 
@@ -2091,7 +2087,7 @@ i8080_cpu_instruction_pchl(struct i8080_cpu *cpu) {
 /* XCHG */
 
 static bool
-i8080_cpu_instruction_xchg(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_xchg(struct i8080_cpu *cpu, union i8080_imm imm) {
 	const uint16_t swap = cpu->registers.pair.d;
 
 	cpu->registers.pair.d = cpu->registers.pair.h;
@@ -2103,9 +2099,9 @@ i8080_cpu_instruction_xchg(struct i8080_cpu *cpu) {
 /* DI */
 
 static bool
-i8080_cpu_instruction_di(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_di(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	/* TODO */
+	cpu->inte = 0;
 
 	return false;
 }
@@ -2113,7 +2109,7 @@ i8080_cpu_instruction_di(struct i8080_cpu *cpu) {
 /* SPHL */
 
 static bool
-i8080_cpu_instruction_sphl(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_sphl(struct i8080_cpu *cpu, union i8080_imm imm) {
 
 	cpu->sp = cpu->registers.pair.h;
 
@@ -2123,16 +2119,16 @@ i8080_cpu_instruction_sphl(struct i8080_cpu *cpu) {
 /* EI */
 
 static bool
-i8080_cpu_instruction_ei(struct i8080_cpu *cpu) {
+i8080_cpu_instruction_ei(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	/* TODO */
+	cpu->inte = 1;
 
 	return false;
 }
 
 static const struct i8080_instruction {
 	const char *mnemonic;
-	bool (*execute)(struct i8080_cpu *);
+	bool (*execute)(struct i8080_cpu *, union i8080_imm);
 	unsigned length, nojump, onjump;
 } instructions[] = {
 	/* 0x00 */ { "NOP",        .execute = i8080_cpu_instruction_nop,        .length = 1, .nojump =  4 },
@@ -2437,15 +2433,25 @@ i8080_cpu_deinit(struct i8080_cpu *cpu) {
 int
 i8080_cpu_next(struct i8080_cpu *cpu) {
 	const struct i8080_instruction *instruction = instructions + cpu->memory[cpu->pc];
+	union i8080_imm imm = { };
 
-	if(cpu->pc + instruction->length > sizeof(cpu->memory)) {
-		/* bad immediate access */
-		return -1;
+	switch(instruction->length) {
+	case 2:
+		i8080_cpu_load8(cpu, cpu->pc + 1, &imm.d8);
+		break;
+	case 3:
+		i8080_cpu_load16(cpu, cpu->pc + 1, &imm.d16);
+		break;
+	default:
+		break;
 	}
 
+	/********************************
+	 * Temporary until port of CP/M *
+	 ********************************/
 	switch(cpu->pc) {
 	case 0:
-		cpu->state.stopped = 1;
+		cpu->stopped = 1;
 		break;
 	case 5:
 		if(cpu->registers.c == 2) {
@@ -2461,13 +2467,14 @@ i8080_cpu_next(struct i8080_cpu *cpu) {
 		}
 		break;
 	}
+	/********************************/
 
 	cpu->pc += instruction->length;
 
-	if(!instruction->execute(cpu)) { /* nojump */
-		cpu->elapsed_cycles += instruction->nojump;
+	if(!instruction->execute(cpu, imm)) { /* nojump */
+		cpu->uptime_cycles += instruction->nojump;
 	} else { /* onjump */
-		cpu->elapsed_cycles += instruction->onjump;
+		cpu->uptime_cycles += instruction->onjump;
 	}
 
 	return 0;
@@ -2478,17 +2485,17 @@ i8080_cpu_print(const struct i8080_cpu *cpu, FILE *filep) {
 
 	fprintf(filep,
 		"i8080 cpu state:\n"
-		"\t- state [stopped: %d, cycle: %lu]\n"
+		"\t- uptime: %lu cycles\n"
 		"\t- registers [b: 0x%.2X, c: 0x%.2X, d: 0x%.2X, e: 0x%.2X, h: 0x%.2X, l: 0x%.2X, a: 0x%.2X]\n"
 		"\t- registers pairs [b: 0x%.4X, d: 0x%.4X, h: 0x%.4X, psw: 0x%.4X]\n"
 		"\t- conditions flags [0x%.2X]\n"
-		"\t- execution [sp: 0x%.4X, pc: 0x%.4X]\n",
-		cpu->state.stopped, cpu->elapsed_cycles,
+		"\t- execution [sp: 0x%.4X, pc: 0x%.4X, inte: %d, stopped: %d]\n",
+		cpu->uptime_cycles,
 		cpu->registers.b, cpu->registers.c, cpu->registers.d, cpu->registers.e,
 		cpu->registers.h, cpu->registers.l, cpu->registers.a,
 		cpu->registers.pair.b, cpu->registers.pair.d, cpu->registers.pair.h, cpu->registers.pair.psw,
 		cpu->registers.f,
-		cpu->sp, cpu->pc);
+		cpu->sp, cpu->pc, cpu->inte, cpu->stopped);
 
 	return 0;
 }

@@ -78,7 +78,7 @@ main(int argc, char **argv) {
 		}
 
 		if(args.run) {
-			while(!cpu.state.stopped) {
+			while(!cpu.stopped) {
 				i8080_cpu_next(&cpu);
 			}
 		}

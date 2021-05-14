@@ -34,10 +34,15 @@
 #define I8080_MASK_CONDITION_ZERO            (1 << I8080_BIT_CONDITION_ZERO)
 #define I8080_MASK_CONDITION_SIGN            (1 << I8080_BIT_CONDITION_SIGN)
 
+union i8080_imm {
+	uint16_t a16;
+	uint16_t d16;
+	uint8_t d8;
+};
+
 struct i8080_cpu {
-	struct {
-		unsigned stopped : 1;
-	} state;
+	unsigned stopped : 1;
+	unsigned inte : 1;
 	union {
 		struct {
 #ifdef I8080_TARGET_LITTLE_ENDIAN
@@ -69,7 +74,7 @@ struct i8080_cpu {
 		} pair;
 	} registers;
 	uint16_t pc, sp;
-	uint64_t elapsed_cycles;
+	uint64_t uptime_cycles;
 	uint8_t memory[I8080_MEMORY_SIZE];
 };
 
