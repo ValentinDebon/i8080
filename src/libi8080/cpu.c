@@ -29,13 +29,45 @@
 
 static inline void
 i8080_cpu_store8(struct i8080_cpu *cpu, uint16_t address, uint8_t src) {
+	const struct i8080_rom_section *section = cpu->rom_map;
+
+	if(section != NULL) {
+		while(section->begin != section->end
+			&& (address < section->begin || address >= section->end)) {
+			section++;
+		}
+
+		if(section->begin != section->end) {
+			return;
+		}
+	}
+
 	cpu->memory[address] = src;
 }
 
 static inline void
 i8080_cpu_store16(struct i8080_cpu *cpu, uint16_t address, uint16_t src) {
-	i8080_cpu_store8(cpu, address, src);
-	i8080_cpu_store8(cpu, address + 1, src >> 8);
+	const struct i8080_rom_section *section = cpu->rom_map;
+
+	if(section != NULL) {
+		while(section->begin != section->end
+			&& (address < section->begin - 1 || address >= section->end)) {
+			section++;
+		}
+
+		if(section->begin != section->end) {
+			if(address < section->begin) {
+				cpu->memory[address] = src;
+			}
+			if(address == section->end - 1) {
+				cpu->memory[address + 1] = src >> 8;
+			}
+			return;
+		}
+	}
+
+	cpu->memory[address] = src;
+	cpu->memory[address + 1] = src >> 8;
 }
 
 static inline void
@@ -45,7 +77,11 @@ i8080_cpu_load8(const struct i8080_cpu *cpu, uint16_t address, uint8_t *dst) {
 
 static inline void
 i8080_cpu_load16(const struct i8080_cpu *cpu, uint16_t address, uint16_t *dst) {
-	*dst = (uint16_t)cpu->memory[address + 1] << 8 | cpu->memory[address];
+	if(address != 0xFFFF) {
+		*dst = (uint16_t)cpu->memory[address + 1] << 8 | cpu->memory[address];
+	} else {
+		*dst = cpu->memory[address];
+	}
 }
 
 /*********************************

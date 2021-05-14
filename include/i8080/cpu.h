@@ -40,6 +40,10 @@ struct i8080_io {
 	void (*output)(struct i8080_cpu *, uint8_t);
 };
 
+struct i8080_rom_section {
+	uint16_t begin, end;
+};
+
 struct i8080_instruction {
 	const char *mnemonic;
 	bool (*execute)(struct i8080_cpu *, union i8080_imm);
@@ -82,6 +86,7 @@ struct i8080_cpu {
 	uint16_t pc, sp;
 	uint64_t uptime_cycles;
 	const struct i8080_io *io;
+	const struct i8080_rom_section *rom_map;
 	uint8_t memory[I8080_MEMORY_SIZE];
 };
 
