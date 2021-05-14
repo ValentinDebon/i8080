@@ -36,8 +36,8 @@ function(add_test_i8080 name)
 	add_test(NAME "${name}" COMMAND i8080 -- "${CMAKE_CURRENT_SOURCE_DIR}/test/${name}.COM")
 endfunction()
 
-add_test_i8080(8080EXM)
-add_test_i8080(8080PRE)
-add_test_i8080(CPUTEST)
 add_test_i8080(TST8080)
+add_test_i8080(8080PRE)
+add_test_i8080(8080EXM)
+add_test_i8080(CPUTEST)
 

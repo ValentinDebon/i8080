@@ -1,50 +1,88 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 #include <err.h>
 
 #include "i8080/cpu.h"
 
 struct i8080_args {
-	const char *disassembly;
-	unsigned run : 1;
 };
 
 static void
-i8080_disassemble(const struct i8080_cpu *cpu, const char *filename) {
-	FILE *filep = fopen(filename, "w");
+cpm_input(struct i8080_cpu *cpu, uint8_t device) {
+}
 
-	if(filep == NULL) {
-		err(EXIT_FAILURE, "fopen %s", filename);
+static void
+cpm_output(struct i8080_cpu *cpu, uint8_t device) {
+}
+
+static const struct i8080_io cpm_io = {
+	.input = cpm_input, .output = cpm_output,
+};
+
+static int
+i8080_cpu_init_from_file(struct i8080_cpu *cpu, const char *filename, uint16_t address) {
+	const int fd = open(filename, O_RDONLY);
+
+	if(fd == -1) {
+		return errno;
 	}
 
-	for(long i = 0; i < sizeof(cpu->memory); i++) {
-		i8080_cpu_print_instruction(cpu, i, filep);
+	i8080_cpu_init(cpu, &cpm_io);
+
+	cpu->memory[0x0005] = 0xC9;
+	cpu->memory[0x0006] = 0xFF;
+	cpu->memory[0x0007] = 0xFF;
+
+	cpu->pc = address;
+
+	const ssize_t readval = read(fd, cpu->memory + address, I8080_MEMORY_SIZE - address);
+
+	close(fd);
+
+	if(readval == -1) {
+		return errno;
 	}
 
-	fclose(filep);
+	return 0;
+}
+
+static int
+i8080_cpu_print(const struct i8080_cpu *cpu, FILE *filep) {
+
+	fprintf(filep,
+		"i8080 cpu state:\n"
+		"\t- uptime: %lu cycles\n"
+		"\t- registers [b: 0x%.2X, c: 0x%.2X, d: 0x%.2X, e: 0x%.2X, h: 0x%.2X, l: 0x%.2X, a: 0x%.2X]\n"
+		"\t- registers pairs [b: 0x%.4X, d: 0x%.4X, h: 0x%.4X, psw: 0x%.4X]\n"
+		"\t- conditions flags [0x%.2X]\n"
+		"\t- execution [sp: 0x%.4X, pc: 0x%.4X, inte: %d, stopped: %d]\n",
+		cpu->uptime_cycles,
+		cpu->registers.b, cpu->registers.c, cpu->registers.d, cpu->registers.e,
+		cpu->registers.h, cpu->registers.l, cpu->registers.a,
+		cpu->registers.pair.b, cpu->registers.pair.d, cpu->registers.pair.h, cpu->registers.pair.psw,
+		cpu->registers.f,
+		cpu->sp, cpu->pc, cpu->inte, cpu->stopped);
+
+	return 0;
 }
 
 static void
 i8080_usage(const char *i8080name) {
-	fprintf(stderr, "usage: %s [-D <disassembly>] program\n", i8080name);
+	fprintf(stderr, "usage: %s program\n", i8080name);
 	exit(EXIT_FAILURE);
 }
 
 static struct i8080_args
 i8080_parse_args(int argc, char **argv) {
 	struct i8080_args args = {
-		.disassembly = NULL,
-		.run = 1,
 	};
 	int c;
 
-	while((c = getopt(argc, argv, ":D:")) != -1) {
+	while((c = getopt(argc, argv, ":")) != -1) {
 		switch(c) {
-		case 'D':
-			args.disassembly = optarg;
-			args.run = 0;
-			break;
 		case '?':
 			warnx("Invalid option -%c", optopt);
 			i8080_usage(*argv);
@@ -73,14 +111,27 @@ main(int argc, char **argv) {
 
 		i8080_cpu_init_from_file(&cpu, filename, 0x100);
 
-		if(args.disassembly != NULL) {
-			i8080_disassemble(&cpu, args.disassembly);
-		}
+		while(!cpu.stopped) {
+			switch(cpu.pc) {
+			case 0:
+				cpu.stopped = 1;
+				break;
+			case 5:
+				if(cpu.registers.c == 2) {
+					fputc(cpu.registers.e, stdout);
+				} else if(cpu.registers.c == 9) {
+					uint16_t address = cpu.registers.pair.d;
+					uint8_t byte;
 
-		if(args.run) {
-			while(!cpu.stopped) {
-				i8080_cpu_next(&cpu);
+					while(byte = cpu.memory[address], byte != 0x24) {
+						fputc(byte, stdout);
+						address++;
+					}
+				}
+				break;
 			}
+
+			i8080_cpu_next(&cpu);
 		}
 
 		i8080_cpu_deinit(&cpu);

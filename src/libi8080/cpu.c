@@ -1,9 +1,4 @@
-#include <stdio.h>
-#include <stdbool.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
 
 #include "i8080/cpu.h"
 
@@ -2046,7 +2041,7 @@ i8080_cpu_instruction_rst_7(struct i8080_cpu *cpu, union i8080_imm imm) {
 static bool
 i8080_cpu_instruction_out_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	/* TODO */
+	cpu->io->output(cpu, imm.d8);
 
 	return false;
 }
@@ -2056,7 +2051,7 @@ i8080_cpu_instruction_out_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 static bool
 i8080_cpu_instruction_in_d8(struct i8080_cpu *cpu, union i8080_imm imm) {
 
-	/* TODO */
+	cpu->io->input(cpu, imm.d8);
 
 	return false;
 }
@@ -2126,11 +2121,7 @@ i8080_cpu_instruction_ei(struct i8080_cpu *cpu, union i8080_imm imm) {
 	return false;
 }
 
-static const struct i8080_instruction {
-	const char *mnemonic;
-	bool (*execute)(struct i8080_cpu *, union i8080_imm);
-	unsigned length, nojump, onjump;
-} instructions[] = {
+static const struct i8080_instruction instructions[] = {
 	/* 0x00 */ { "NOP",        .execute = i8080_cpu_instruction_nop,        .length = 1, .nojump =  4 },
 	/* 0x01 */ { "LXI B D16",  .execute = i8080_cpu_instruction_lxi_b_d16,  .length = 3, .nojump = 10 },
 	/* 0x02 */ { "STAX B",     .execute = i8080_cpu_instruction_stax_b,     .length = 1, .nojump =  7 },
@@ -2390,37 +2381,13 @@ static const struct i8080_instruction {
 };
 
 int
-i8080_cpu_init(struct i8080_cpu *cpu) {
+i8080_cpu_init(struct i8080_cpu *cpu, const struct i8080_io *io) {
 
 	memset(cpu, 0, sizeof(*cpu));
 
 	cpu->registers.f = I8080_MASK_CONDITION_UNUSED1;
-
-	return 0;
-}
-
-int
-i8080_cpu_init_from_file(struct i8080_cpu *cpu, const char *filename, uint16_t address) {
-	const int fd = open(filename, O_RDONLY);
-
-	if(fd == -1) {
-		return errno;
-	}
-
-	i8080_cpu_init(cpu);
-
-	i8080_cpu_store8(cpu, 0x0005, 0xC9);
-	i8080_cpu_store16(cpu, 0x0006, 0xFFFF);
-
-	cpu->pc = address;
-
-	const ssize_t readval = read(fd, cpu->memory + address, I8080_MEMORY_SIZE - address);
-
-	close(fd);
-
-	if(readval == -1) {
-		return errno;
-	}
+	cpu->inte = 1;
+	cpu->io = io;
 
 	return 0;
 }
@@ -2435,6 +2402,10 @@ i8080_cpu_next(struct i8080_cpu *cpu) {
 	const struct i8080_instruction *instruction = instructions + cpu->memory[cpu->pc];
 	union i8080_imm imm = { };
 
+	if(cpu->stopped) {
+		return 0;
+	}
+
 	switch(instruction->length) {
 	case 2:
 		i8080_cpu_load8(cpu, cpu->pc + 1, &imm.d8);
@@ -2445,29 +2416,6 @@ i8080_cpu_next(struct i8080_cpu *cpu) {
 	default:
 		break;
 	}
-
-	/********************************
-	 * Temporary until port of CP/M *
-	 ********************************/
-	switch(cpu->pc) {
-	case 0:
-		cpu->stopped = 1;
-		break;
-	case 5:
-		if(cpu->registers.c == 2) {
-			fputc(cpu->registers.e, stdout);
-		} else if(cpu->registers.c == 9) {
-			uint16_t address = cpu->registers.pair.d;
-			uint8_t byte;
-
-			while(i8080_cpu_load8(cpu, address, &byte), byte != 0x24) {
-				fputc(byte, stdout);
-				address++;
-			}
-		}
-		break;
-	}
-	/********************************/
 
 	cpu->pc += instruction->length;
 
@@ -2481,46 +2429,27 @@ i8080_cpu_next(struct i8080_cpu *cpu) {
 }
 
 int
-i8080_cpu_print(const struct i8080_cpu *cpu, FILE *filep) {
+i8080_cpu_interrupt(struct i8080_cpu *cpu, uint8_t opcode, union i8080_imm imm) {
+	const struct i8080_instruction *instruction = instructions + opcode;
 
-	fprintf(filep,
-		"i8080 cpu state:\n"
-		"\t- uptime: %lu cycles\n"
-		"\t- registers [b: 0x%.2X, c: 0x%.2X, d: 0x%.2X, e: 0x%.2X, h: 0x%.2X, l: 0x%.2X, a: 0x%.2X]\n"
-		"\t- registers pairs [b: 0x%.4X, d: 0x%.4X, h: 0x%.4X, psw: 0x%.4X]\n"
-		"\t- conditions flags [0x%.2X]\n"
-		"\t- execution [sp: 0x%.4X, pc: 0x%.4X, inte: %d, stopped: %d]\n",
-		cpu->uptime_cycles,
-		cpu->registers.b, cpu->registers.c, cpu->registers.d, cpu->registers.e,
-		cpu->registers.h, cpu->registers.l, cpu->registers.a,
-		cpu->registers.pair.b, cpu->registers.pair.d, cpu->registers.pair.h, cpu->registers.pair.psw,
-		cpu->registers.f,
-		cpu->sp, cpu->pc, cpu->inte, cpu->stopped);
+	if(!cpu->inte) {
+		return 0;
+	}
+
+	cpu->pc += instruction->length;
+	cpu->inte = 0;
+
+	if(!instruction->execute(cpu, imm)) { /* nojump */
+		cpu->uptime_cycles += instruction->nojump;
+	} else { /* onjump */
+		cpu->uptime_cycles += instruction->onjump;
+	}
 
 	return 0;
 }
 
-int
-i8080_cpu_print_instruction(const struct i8080_cpu *cpu, uint16_t address, FILE *filep) {
-	const uint8_t opcode = cpu->memory[address];
-	const struct i8080_instruction *instruction = instructions + opcode;
-
-	switch(instruction->length) {
-	case 1:
-		fprintf(filep, "0x%.4X [0x%.2X] %s\n", address, opcode, instruction->mnemonic);
-		break;
-	case 2: {
-		uint8_t m;
-		i8080_cpu_load8(cpu, address + 1, &m);
-		fprintf(filep, "0x%.4X [0x%.2X] %s 0x%.2X\n", address, opcode, instruction->mnemonic, m);
-	} break;
-	case 3: {
-		uint16_t m;
-		i8080_cpu_load16(cpu, address + 1, &m);
-		fprintf(filep, "0x%.4X [0x%.2X] %s 0x%.4X\n", address, opcode, instruction->mnemonic, m);
-	} break;
-	}
-
-	return 0;
+const struct i8080_instruction *
+i8080_instruction_info(uint8_t opcode) {
+	return instructions + opcode;
 }
 

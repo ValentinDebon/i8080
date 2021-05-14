@@ -2,6 +2,7 @@
 #define I8080_CPU_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stddef.h>
 
 #include "i8080/endianness.h"
@@ -26,10 +27,23 @@
 #define I8080_MASK_CONDITION_ZERO            (1 << I8080_BIT_CONDITION_ZERO)
 #define I8080_MASK_CONDITION_SIGN            (1 << I8080_BIT_CONDITION_SIGN)
 
+struct i8080_cpu;
+
 union i8080_imm {
 	uint16_t a16;
 	uint16_t d16;
 	uint8_t d8;
+};
+
+struct i8080_io {
+	void (*input)(struct i8080_cpu *, uint8_t);
+	void (*output)(struct i8080_cpu *, uint8_t);
+};
+
+struct i8080_instruction {
+	const char *mnemonic;
+	bool (*execute)(struct i8080_cpu *, union i8080_imm);
+	unsigned length, nojump, onjump;
 };
 
 struct i8080_cpu {
@@ -67,14 +81,12 @@ struct i8080_cpu {
 	} registers;
 	uint16_t pc, sp;
 	uint64_t uptime_cycles;
+	const struct i8080_io *io;
 	uint8_t memory[I8080_MEMORY_SIZE];
 };
 
 int
-i8080_cpu_init(struct i8080_cpu *cpu);
-
-int
-i8080_cpu_init_from_file(struct i8080_cpu *cpu, const char *filename, uint16_t address);
+i8080_cpu_init(struct i8080_cpu *cpu, const struct i8080_io *io);
 
 int
 i8080_cpu_deinit(struct i8080_cpu *cpu);
@@ -83,10 +95,10 @@ int
 i8080_cpu_next(struct i8080_cpu *cpu);
 
 int
-i8080_cpu_print(const struct i8080_cpu *cpu, FILE *filep);
+i8080_cpu_interrupt(struct i8080_cpu *cpu, uint8_t opcode, union i8080_imm imm);
 
-int
-i8080_cpu_print_instruction(const struct i8080_cpu *cpu, uint16_t address, FILE *filep);
+const struct i8080_instruction *
+i8080_instruction_info(uint8_t opcode);
 
 #ifdef I8080_TARGET_LITTLE_ENDIAN
 _Static_assert(offsetof(struct i8080_cpu, registers.pair.b) + 1 == offsetof(struct i8080_cpu, registers.b), "Registers b is not aligned with register pair b");
