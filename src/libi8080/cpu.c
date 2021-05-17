@@ -2422,7 +2422,6 @@ i8080_cpu_init(struct i8080_cpu *cpu, const struct i8080_io *io) {
 	memset(cpu, 0, sizeof(*cpu));
 
 	cpu->registers.f = I8080_MASK_CONDITION_UNUSED1;
-	cpu->inte = 1;
 	cpu->io = io;
 
 	return 0;
@@ -2472,7 +2471,6 @@ i8080_cpu_interrupt(struct i8080_cpu *cpu, uint8_t opcode, union i8080_imm imm) 
 		return 0;
 	}
 
-	cpu->pc += instruction->length;
 	cpu->inte = 0;
 
 	if(!instruction->execute(cpu, imm)) { /* nojump */

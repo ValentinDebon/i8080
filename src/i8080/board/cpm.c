@@ -1,12 +1,9 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <err.h>
 
 #include "cpm.h"
+
+#include "../ram.h"
 
 /* Wizard trick to create an output device simulating some CP/M's BIOS calls
  * until a real CP/M is emulated */
@@ -48,33 +45,11 @@ cpm_output(struct i8080_cpu *cpu, uint8_t device) {
 
 static void
 cpm_board_setup(struct i8080_cpu *cpu, const char *filename) {
-	const int fd = open(filename, O_RDONLY);
-
-	if(fd == -1) {
-		err(EXIT_FAILURE, "open %s", filename);
-	}
 
 	memcpy(cpu->memory, cpm_bios, sizeof(cpm_bios));
+	i8080_ram_load_file(cpu, filename, 0x100);
 
 	cpu->pc = 0x100;
-
-	uint8_t *next = cpu->memory + cpu->pc;
-	size_t left = sizeof(cpu->memory) - cpu->pc;
-	ssize_t readval;
-
-	while(left != 0 && (readval = read(fd, next, left)) > 0) {
-		next += readval;
-		left -= readval;
-	}
-
-	const int errcode = errno;
-
-	close(fd);
-
-	if(readval == -1) {
-		errno = errcode;
-		err(EXIT_FAILURE, "read %s", filename);
-	}
 }
 
 static void

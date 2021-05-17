@@ -19,7 +19,7 @@ add_executable(i8080 ${I8080_SOURCES})
 file(GLOB_RECURSE LIBI8080_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/libi8080/*.c)
 add_library(libi8080 ${LIBI8080_SOURCES})
 
-target_link_libraries(i8080 PUBLIC libi8080)
+target_link_libraries(i8080 PUBLIC libi8080 SDL2)
 
 set_target_properties(libi8080 PROPERTIES
 	OUTPUT_NAME i8080

@@ -8,7 +8,8 @@
 #include "i8080/cpu.h"
 
 #include "board.h"
-#include "cpm.h"
+#include "board/cpm.h"
+#include "board/space_invaders.h"
 
 struct i8080_args {
 	const struct i8080_board *board;
@@ -20,6 +21,7 @@ static const struct i8080_preset {
 	const struct i8080_board *board;
 } presets[] = {
 	{ "CP/M", &cpm_board },
+	{ "space-invaders", &space_invaders_board },
 };
 
 static const struct option longopts[] = {
