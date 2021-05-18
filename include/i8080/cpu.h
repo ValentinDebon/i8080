@@ -102,6 +102,9 @@ i8080_cpu_next(struct i8080_cpu *cpu);
 int
 i8080_cpu_interrupt(struct i8080_cpu *cpu, uint8_t opcode, union i8080_imm imm);
 
+int
+i8080_cpu_interrupt_restart(struct i8080_cpu *cpu, unsigned id);
+
 const struct i8080_instruction *
 i8080_instruction_info(uint8_t opcode);
 

@@ -11,7 +11,9 @@ set(CMAKE_C_STANDARD_REQUIRED True)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
-include_directories(include)
+find_package(SDL2 REQUIRED)
+
+include_directories(include ${SDL2_INCLUDE_DIRS})
 
 file(GLOB_RECURSE I8080_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/i8080/*.c)
 add_executable(i8080 ${I8080_SOURCES})
@@ -19,7 +21,7 @@ add_executable(i8080 ${I8080_SOURCES})
 file(GLOB_RECURSE LIBI8080_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/libi8080/*.c)
 add_library(libi8080 ${LIBI8080_SOURCES})
 
-target_link_libraries(i8080 PUBLIC libi8080 SDL2)
+target_link_libraries(i8080 PUBLIC libi8080 ${SDL2_LIBRARIES})
 
 set_target_properties(libi8080 PROPERTIES
 	OUTPUT_NAME i8080

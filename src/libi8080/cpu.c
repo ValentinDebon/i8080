@@ -2463,7 +2463,7 @@ i8080_cpu_next(struct i8080_cpu *cpu) {
 	return 0;
 }
 
-int
+inline int
 i8080_cpu_interrupt(struct i8080_cpu *cpu, uint8_t opcode, union i8080_imm imm) {
 	const struct i8080_instruction *instruction = instructions + opcode;
 
@@ -2480,6 +2480,12 @@ i8080_cpu_interrupt(struct i8080_cpu *cpu, uint8_t opcode, union i8080_imm imm) 
 	}
 
 	return 0;
+}
+
+int
+i8080_cpu_interrupt_restart(struct i8080_cpu *cpu, unsigned id) {
+	const union i8080_imm imm = { };
+	return i8080_cpu_interrupt(cpu, 0xC7 | (id & 0x03) << 3, imm);
 }
 
 const struct i8080_instruction *
