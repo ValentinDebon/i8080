@@ -107,12 +107,12 @@ static void
 space_invaders_output(struct i8080_cpu *cpu, uint8_t device) {
 	switch(device) {
 	case 2:
-		space_invaders.shift_amount = cpu->registers.a & 0x3;
+		space_invaders.shift_amount = cpu->registers.a & 0x7;
 		return;
 	case 3:
 		return;
 	case 4:
-		space_invaders.shift_register = cpu->registers.a << 8 | space_invaders.shift_register >> 8;
+		space_invaders.shift_register = space_invaders.shift_register << 8 | cpu->registers.a;
 		return;
 	case 5:
 		return;
@@ -134,7 +134,7 @@ space_invaders_board_setup(struct i8080_cpu *cpu, const char *filename) {
 	space_invaders.isonline = true;
 	space_invaders.inputs = SPACE_INVADERS_MASK_INPUT_DEFAULT;
 
-	space_invaders.cycle_duration = space_invaders_frequency_period(2000000);
+	space_invaders.cycle_duration = space_invaders_frequency_period(3000000);
 	space_invaders.vblank_duration = space_invaders_frequency_period(60);
 	space_invaders.start = space_invaders_now();
 
@@ -234,6 +234,17 @@ space_invaders_blit(const uint8_t *vram, bool vblank) {
 		pixels[i] = -(vram[i / 8] >> (i & 7) & 1);
 	}
 
+	for(unsigned i = 0; i < sizeof(pixels); i+= SPACE_INVADERS_SCREEN_WIDTH) {
+		/* Masking white to red */
+		for(unsigned x = 192; x < 224; x++) {
+			pixels[i + x] &= 0xE0;
+		}
+		/* Masking white to green */
+		for(unsigned x = 0; x < 64; x++) {
+			pixels[i + x] &= 0x1C;
+		}
+	}
+
 	SDL_UpdateTexture(space_invaders.sdl_texture, &src, pixels, SPACE_INVADERS_SCREEN_WIDTH);
 	SDL_RenderCopyEx(space_invaders.sdl_renderer, space_invaders.sdl_texture, &src, &dest, -90.0, &center, SDL_FLIP_NONE);
 	SDL_RenderPresent(space_invaders.sdl_renderer);
@@ -248,7 +259,7 @@ space_invaders_board_sync(struct i8080_cpu *cpu) {
 		space_invaders_sleep(uptime - elapsed);
 	}
 
-	const uint64_t interrupt_frame = uptime / (space_invaders.vblank_duration / 2) ;
+	const uint64_t interrupt_frame = uptime / (space_invaders.vblank_duration / 2);
 	while(space_invaders.interrupt_frame != interrupt_frame) {
 		const uint8_t * const vram = cpu->memory + 0x2400;
 
