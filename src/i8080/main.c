@@ -1,5 +1,3 @@
-#define POSIXLY_CORRECT
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +11,7 @@
 
 struct i8080_args {
 	const struct i8080_board *board;
-	const char *preset, *plugin;
+	const char *preset;
 };
 
 static const struct i8080_preset {
@@ -25,8 +23,7 @@ static const struct i8080_preset {
 };
 
 static const struct option longopts[] = {
-	{ "preset", required_argument },
-	{ "plugin", required_argument },
+	{ "board", required_argument },
 	{ },
 };
 
@@ -39,7 +36,14 @@ i8080_preset_find(const char *preset) {
 	}
 
 	if(current == end) {
-		fprintf(stderr, "Unable to find preset named '%s'\n", preset);
+		fprintf(stderr, "Unable to find preset named '%s', available boards are:\n", preset);
+
+		current = presets;
+		while(current != end) {
+			printf("  - %s\n", current->name);
+			current++;
+		}
+
 		exit(EXIT_FAILURE);
 	}
 
@@ -48,7 +52,7 @@ i8080_preset_find(const char *preset) {
 
 static void
 i8080_usage(const char *i8080name) {
-	fprintf(stderr, "usage: %s [-preset <preset> | -plugin <plugin>] program\n", i8080name);
+	fprintf(stderr, "usage: %s [-board <preset>] program\n", i8080name);
 	exit(EXIT_FAILURE);
 }
 
@@ -57,16 +61,14 @@ i8080_parse_args(int argc, char **argv) {
 	struct i8080_args args = {
 		.board = &cpm_board,
 		.preset = NULL,
-		.plugin = NULL,
 	};
 	int longindex, c;
 
 	while(c = getopt_long_only(argc, argv, ":", longopts, &longindex), c != -1) {
 		switch(c) {
 		case 0:
-			switch(longindex) {
-			case 0: args.preset = optarg; break;
-			case 1: args.plugin = optarg; break;
+			if(longindex == 0) {
+				args.preset = optarg;
 			}
 			break;
 		case '?':
@@ -79,17 +81,7 @@ i8080_parse_args(int argc, char **argv) {
 	}
 
 	if(args.preset != NULL) {
-		if(args.plugin != NULL) {
-			fprintf(stderr, "%s: Cannot specify both a preset (%s) and a plugin (%s)\n", *argv, args.preset, args.plugin);
-			i8080_usage(*argv);
-		}
-
 		args.board = i8080_preset_find(args.preset);
-	}
-
-	if(args.plugin != NULL) {
-		fprintf(stderr, "%s: Plugins not yet supported!\n", *argv);
-		exit(EXIT_FAILURE);
 	}
 
 	if(argc - optind != 1) {

@@ -132,7 +132,6 @@ space_invaders_board_setup(struct i8080_cpu *cpu, const char *filename) {
 	cpu->rom_map = space_invaders_rom_map;
 
 	space_invaders.isonline = true;
-	space_invaders.inputs = SPACE_INVADERS_MASK_INPUT_DEFAULT;
 
 	space_invaders.cycle_duration = space_invaders_frequency_period(3000000);
 	space_invaders.vblank_duration = space_invaders_frequency_period(60);
@@ -247,7 +246,13 @@ space_invaders_blit(const uint8_t *vram, bool vblank) {
 
 	SDL_UpdateTexture(space_invaders.sdl_texture, &src, pixels, SPACE_INVADERS_SCREEN_WIDTH);
 	SDL_RenderCopyEx(space_invaders.sdl_renderer, space_invaders.sdl_texture, &src, &dest, -90.0, &center, SDL_FLIP_NONE);
-	SDL_RenderPresent(space_invaders.sdl_renderer);
+
+	if(vblank) {
+		/* As SDL_Renderer works with a backbuffer, we can't really blit half the screen
+		   without explicitly asking to do so. Which translates to a half screen blinking as hell.
+		   So we render the screen once per VBLANK but update the texture as requested for each VBLANK's half */
+		SDL_RenderPresent(space_invaders.sdl_renderer);
+	}
 }
 
 static void
